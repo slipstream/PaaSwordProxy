@@ -1,5 +1,5 @@
 (ns com.sixsq.slipstream.ssproxy
-  "Provides a simple ring example to ensure that generic ring container works.")
+  "SlipStream Proxy for PaaSword project.")
 
 (defn handler [request]
   {:status  200
