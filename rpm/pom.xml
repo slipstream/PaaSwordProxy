@@ -68,7 +68,7 @@
           <classifier>${package.os}</classifier>
           <release>${BUILD_NUMBER}.${package.os}</release>
           <summary>SlipStream Proxy Service</summary>
-          <name>slipstream-proxy</name>
+          <name>slipstream-proxy-paasword</name>
           <group>System</group>
           <vendor>SlipStream</vendor>
           <packager>SlipStream</packager>
