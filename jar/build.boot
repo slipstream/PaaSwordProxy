@@ -23,15 +23,19 @@
                 (merge-defaults
                   ['sixsq/default-deps (get-env :version)]
                   '[[org.clojure/clojure]
+                    [org.clojure/tools.logging]
+                    [org.clojure/data.json]
+                    [log4j]
+                    [org.slf4j/slf4j-log4j12]
 
                     [com.sixsq.slipstream/slipstream-ring-container "3.21-SNAPSHOT" :scope "test"]
                     [com.sixsq.slipstream/SlipStreamClientAPI-jar "3.21-SNAPSHOT"]
 
-                    [org.clojure/tools.logging]
                     [aleph]
                     [environ]
-                    [log4j]
-                    [org.slf4j/slf4j-log4j12]
+                    [compojure]
+                    [ring/ring-json]
+                    [ring/ring-defaults]
 
                     ;; boot tasks
                     [boot-environ]
