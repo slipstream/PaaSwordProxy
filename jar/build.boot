@@ -1,4 +1,4 @@
-(def +version+ "3.21-SNAPSHOT")
+(def +version+ "3.23-SNAPSHOT")
 
 (set-env!
   :project 'com.sixsq.slipstream/ssproxy
@@ -28,8 +28,8 @@
                     [log4j]
                     [org.slf4j/slf4j-log4j12]
 
-                    [com.sixsq.slipstream/slipstream-ring-container "3.21-SNAPSHOT" :scope "test"]
-                    [com.sixsq.slipstream/SlipStreamClientAPI-jar "3.21-SNAPSHOT"]
+                    [com.sixsq.slipstream/slipstream-ring-container :scope "test"]
+                    [com.sixsq.slipstream/SlipStreamClientAPI-jar]
 
                     [aleph]
                     [environ]
