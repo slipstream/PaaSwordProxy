@@ -75,6 +75,7 @@
           <license>Apache 2.0</license>
           <url>http://sixsq.com</url>
           <needarch>noarch</needarch>
+          <targetOS>linux</targetOS>
           <description>
             SlipStream Proxy Service
           </description>

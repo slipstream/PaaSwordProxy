@@ -21,11 +21,14 @@
 (require '[taoensso.timbre :as tlog])
 (tlog/merge-config! {:ns-blacklist ["kvlt.*"]})
 
+(def DB-port "5432")
+
 (def endpoint "https://nuv.la")
 (def required-main-keys ["username" "password" "hookURL"])
 (def required-comp-keys ["component" "location"])
 
 (defn status-202
+  "Request accepted."
   [& [msg]]
   {:status  202
    :headers {"Content-Type" "text/plain"}
@@ -88,8 +91,8 @@
   (ssauth/login user pass (ssauth/to-login-url endpoint)))
 
 (defn creds
-  "Extracts creds, authns and returns token-based creds for successive use with the service.
-  Throws, if authentication falied to obtain cookie."
+  "Extracts creds, authns and returns token-based creds for successive use with
+  the service. Throws, if authentication falied to obtain cookie."
   [req]
   (if-let [cookie (authn (user req) (pass req))]
     {:cookie cookie}
@@ -125,14 +128,16 @@
 
 (defn put-json-result
   [url json-body]
+  (log/debug "PUT:" json-body)
   (http/put url {:content-type "application/json"
                  :body         (json/write-str json-body)
                  :insecure?    true}))
 
 (defn put-json-failure
   [url error-msg]
-  (put-json-result url {:status  409
-                        :message (str "Failed provisioning resources with: " error-msg)}))
+  (put-json-result
+    url {:status  409
+         :message (str "Failed provisioning resources with: " error-msg)}))
 
 (defn collect
   [ports]
@@ -145,37 +150,41 @@
   [res]
   (every? #(= 200 %) (map #(get % "status") res)))
 
+(defn start-comp
+  "Deploy component and put result into provided port."
+  [cn c port]
+  (log/debug "Deploying component:" cn c port)
+  (go
+    (try
+      (let [run      (deploy-comp c)
+            _        (log/debug (format "Started comp %s with run %s." cn run))
+            run-uuid (url-resource run)]
+        (ssr/wait-ready run-uuid)
+        (if (ssr/aborted? run-uuid)
+          (let [abort-msg (ssr/get-abort run-uuid)
+                res       {"status"  409
+                           "message" (format "Failed to deploy component %s at %s with %s" cn run abort-msg)
+                           cn        {"run-url" run}}]
+            (>! port res))
+          (let [hostname (ssr/get-param run-uuid "machine" nil "hostname")
+                res      {"status"  200
+                          "message" "OK"
+                          cn        {"hostname" hostname
+                                     "port"     DB-port
+                                     "run-url"  run}}]
+            (>! port res)
+            (log/debug "Successfully deployed:" res " with port" port))))
+      (catch Exception e
+        (>! port {"status"  409
+                  "message" (.getMessage e)
+                  cn        {"run-url" "No run URL."}})))))
+
 (defn deployer
   [req]
   (let [comps (components req)
         ports (repeatedly (count comps) chan)]
     (doseq [[[cn c] port] (partition-all 2 (interleave comps ports))]
-      (log/debug "Deploying component:" cn c port)
-      (go
-        (try
-          (let [run      (deploy-comp c)
-                run-uuid (url-resource run)]
-            (log/debug (format "Started comp %s with run %s." cn run))
-            (ssr/wait-ready run-uuid)
-            (if (ssr/aborted? run-uuid)
-              (let [abort-msg (ssr/get-abort run-uuid)
-                    body      {"status"  409
-                               "message" (format "Failed to deploy component %s at %s with %s" cn run abort-msg)
-                               cn        {"run-url" run}}]
-                (>! port body))
-              (let [hostname (ssr/get-param run-uuid "machine" nil "hostname")
-                    body     {"status"  200
-                              "message" "OK"
-                              cn        {"hostname" hostname
-                                         "port"     "5432"
-                                         "run-url"  run}}]
-                (log/debug "Will put result to port:" port)
-                (>! port body)
-                (log/debug "Successfully deployed:" body " with port" port))))
-          (catch Exception e
-            (>! port {"status"  409
-                      "message" (.getMessage e)
-                      cn        {"run-url" "No run URL."}})))))
+      (start-comp cn c port))
     ports))
 
 (defn res-comp-run-uuid
@@ -195,22 +204,31 @@
 (defn report-success
   [req res]
   (let [r (apply merge {} res)]
-    (log/debug "Success. Put results." r)
     (put-json-result (hook-url req) r)))
 
-(defn report-failure
-  [req res]
-  (log/debug "Failure. Terminate and report.")
+(defn abort-msg-from-res
+  [res]
+  (let [abort-msgs (for [c res :when (= 409 (get c "status"))]
+                     (get c "message"))]
+    (format "Failed to provision. Reason(s): [%s]" (s/join "; " abort-msgs))))
+
+(defn terminate-all
+  [res]
   (doseq [c res]
     (log/debug "Terminating:" c)
     (try
       (ssr/terminate (res-comp-run-uuid c))
       (catch Exception e
-        (log/debug (format "Failed to terminate: %s with %s." c (.getMessage e))))))
-  (let [abort-msgs (for [c res :when (= 409 (get c "status"))] (get c "message"))
-        msg        (format "Failed to provision. Reason(s): [%s]" (s/join "; " abort-msgs))]
-    (log/debug "Sending..." msg)
-    (put-json-failure (hook-url req) msg)))
+        (log/debug
+          (format "Failed to terminate: %s with %s." c (.getMessage e)))))))
+
+(defn report-failure
+  [req res]
+  (log/debug "Failure. Terminate and report.")
+  (terminate-all res)
+  (->> res
+       abort-msg-from-res
+       (put-json-failure (hook-url req))))
 
 (defn collector
   "req - initial request.
@@ -238,12 +256,12 @@
 (defn deploy
   [request]
   (try
-    (do (-> request
-            parse-request
-            orchestrate!)
-        (status-202))
+    (-> request
+        parse-request
+        orchestrate!)
     (catch Exception e
-      (status-404 (.getMessage e)))))
+      (status-404 (.getMessage e))))
+  (status-202))
 
 (defroutes app-routes
            (wrap-json-body
