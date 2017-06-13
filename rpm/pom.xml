@@ -10,7 +10,7 @@
   <parent>
     <groupId>com.sixsq.slipstream</groupId>
     <artifactId>ssproxy-pom</artifactId>
-    <version>3.23-SNAPSHOT</version>
+    <version>3.30-SNAPSHOT</version>
   </parent>
 
   <properties>

@@ -1,4 +1,4 @@
-(def +version+ "3.23-SNAPSHOT")
+(def +version+ "3.30-SNAPSHOT")
 
 (set-env!
   :project 'com.sixsq.slipstream/ssproxy
