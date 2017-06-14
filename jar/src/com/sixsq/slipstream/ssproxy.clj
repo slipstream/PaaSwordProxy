@@ -150,12 +150,12 @@
   (let [comps (components req)
         ports (repeatedly (count comps) chan)]
     (doseq [[[cn c] port] (partition-all 2 (interleave comps ports))]
-      (log/debug "Deploying component:" cn c port)
+      (log/info "Deploying component:" cn c port)
       (go
         (try
           (let [run      (deploy-comp c)
                 run-uuid (url-resource run)]
-            (log/debug (format "Started comp %s with run %s." cn run))
+            (log/info (format "Started comp %s with run %s." cn run))
             (ssr/wait-ready run-uuid)
             (if (ssr/aborted? run-uuid)
               (let [abort-msg (ssr/get-abort run-uuid)
@@ -194,23 +194,25 @@
 
 (defn report-success
   [req res]
-  (let [r (apply merge {} res)]
-    (log/debug "Success. Put results." r)
-    (put-json-result (hook-url req) r)))
+  (let [r (apply merge {} res)
+        hookurl (hook-url req)]
+    (log/info "Success. Put results." hookurl r)
+    (put-json-result hookurl r)))
 
-(defn report-failure
+(defn terminate-report-failure
   [req res]
-  (log/debug "Failure. Terminate and report.")
+  (log/info "Failure. Terminate deployment and report.")
   (doseq [c res]
-    (log/debug "Terminating:" c)
+    (log/info "Terminating deployment:" c)
     (try
       (ssr/terminate (res-comp-run-uuid c))
       (catch Exception e
-        (log/debug (format "Failed to terminate: %s with %s." c (.getMessage e))))))
+        (log/info (format "Failed to terminate: %s with %s." c (.getMessage e))))))
   (let [abort-msgs (for [c res :when (= 409 (get c "status"))] (get c "message"))
-        msg        (format "Failed to provision. Reason(s): [%s]" (s/join "; " abort-msgs))]
-    (log/debug "Sending..." msg)
-    (put-json-failure (hook-url req) msg)))
+        msg        (format "Failed to provision. Reason(s): [%s]" (s/join "; " abort-msgs))
+        hookurl    (hook-url req)]
+    (log/info "Report failure:" hookurl msg)
+    (put-json-failure hookurl  msg)))
 
 (defn collector
   "req - initial request.
@@ -219,7 +221,7 @@
   (let [res (collect ports)]
     (if (all-success? res)
       (report-success req res)
-      (report-failure req res))))
+      (terminate-report-failure req res))))
 
 (defn deploy-comps
   [req]
